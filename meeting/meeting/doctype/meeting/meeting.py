@@ -19,6 +19,7 @@ class Meeting(WebsiteGenerator):
 
 	def on_update(self):
 		self.sync_todos()
+	#	self.send_minutes()
 
 	def validate_attendees(self):
 		"""Set missing names and warn if duplicate"""

@@ -1,30 +1,68 @@
 import frappe
 from frappe import _
+from frappe.utils import get_fullname, get_link_to_form
 from frappe.utils import nowdate, add_days
+
 
 @frappe.whitelist()
 def send_invitation_emails(meeting):
 	meeting = frappe.get_doc("Meeting", meeting)
-	meeting.check_permission("email")
+	sender_fullname = get_fullname(frappe.session.user)
 
 	if meeting.status == "Planned":
-		frappe.sendmail(
-			recipients=[d.attendee for d in meeting.attendees],
-			sender=frappe.session.user,
-			subject=meeting.title,
-			message=meeting.invitation_message,
-			reference_doctype=meeting.doctype,
-			reference_name=meeting.name,
-			as_bulk=True
-		)
-
-		meeting.status = "Invitation Sent"
-		meeting.save()
-
-		frappe.msgprint(_("Invitation Sent"))
-
+		if meeting.attendees:
+				message = frappe.get_template("templates/emails/meeting_invitation.html").render({
+					"sender":sender_fullname,
+					"date":meeting.date,
+					"from_time":meeting.from_time,
+					"to_time":meeting.to_time,
+					"invitation_message":meeting.invitation_message,
+					"agenda": meeting.agenda,
+				})
+				frappe.sendmail(
+				recipients=[d.attendee for d in meeting.attendees],
+				sender=frappe.session.user,
+				subject="New Meeting:" + meeting.title,
+				message=message,
+				reference_doctype=meeting.doctype,
+				reference_name=meeting.name,
+				)
+				meeting.status = "Invitation Sent"
+				meeting.save()
+				frappe.msgprint(_("Invitation Sent"))
+		else:
+			frappe.msgprint("Enter atleast one Attendee for Sending")
 	else:
 		frappe.msgprint(_("Meeting Status must be 'Planned'"))
+
+@frappe.whitelist()
+def send_minutes(meeting):
+	meeting = frappe.get_doc("Meeting", meeting)
+	sender_fullname = get_fullname(frappe.session.user)
+	if meeting.status == "Invitation Sent":
+		if meeting.minutes:
+			for d in meeting.minutes:
+				message = frappe.get_template("templates/emails/minute_notification.html").render({
+					"sender":sender_fullname,
+					"action": d.action,
+					"description": d.description,
+					"complete_by":d.complete_by
+				})
+				frappe.sendmail(
+					recipients=d.assigned_to,
+					sender=frappe.session.user,
+					subject=meeting.title,
+					message=message,
+					reference_doctype=meeting.doctype,
+					reference_name=meeting.name,
+					)
+			meeting.status = "In Progress"
+			meeting.save()
+			frappe.msgprint(_("Minutes Sent"))
+		else:
+			frappe.msgprint("Enter atleast one Minute for Sending")
+	else:
+		frappe.msgprint(_("Meeting Status must be 'Invitation Sent'"))
 
 @frappe.whitelist()
 def get_meetings(start, end):
